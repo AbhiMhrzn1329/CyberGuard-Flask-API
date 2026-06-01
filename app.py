@@ -29,22 +29,23 @@
 """
 
 import pickle
+import unicodedata
 import torch
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from transformers import AutoTokenizer, AutoModelForSequenceClassification  # ← changed from DistilBert* to Auto*
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 app = Flask(__name__)
-CORS(app)  # Allow Laravel to call Flask
+CORS(app)
 
-SAVE_DIR = 'cyberguard_mbert_best'  # ← changed from 'saved_model'
+SAVE_DIR = 'cyberguard_mbert_best'
 MAX_LEN  = 128
 
 # ── Load model on startup ──────────────────────
 print("Loading model, please wait...")
 
-tokenizer = AutoTokenizer.from_pretrained(SAVE_DIR)                         # ← changed
-model     = AutoModelForSequenceClassification.from_pretrained(SAVE_DIR)    # ← changed
+tokenizer = AutoTokenizer.from_pretrained(SAVE_DIR)
+model     = AutoModelForSequenceClassification.from_pretrained(SAVE_DIR)
 model.eval()
 
 try:
@@ -67,7 +68,6 @@ model  = model.to(device)
 print(f"✅ Model loaded on {device}")
 print(f"   Labels: {ID2LABEL}\n")
 
-# Badge colors for each category
 LABEL_COLORS = {
     'Not Cyberbullying'  : 'green',
     'Gender'             : 'purple',
@@ -77,8 +77,23 @@ LABEL_COLORS = {
     'Ethnicity'          : 'pink',
 }
 
+# ── Preprocessing ──────────────────────────────
+def preprocess_text(text: str) -> str:
+    # Normalize Devanagari unicode (fixes encoding inconsistencies)
+    text = unicodedata.normalize('NFC', text)
+    # Remove zero-width characters common in Devanagari copy-paste
+    text = text.replace('\u200c', '').replace('\u200d', '').replace('\ufeff', '')
+    return text.strip()
+
+def is_mostly_devanagari(text: str) -> bool:
+    devanagari_chars = sum(1 for c in text if '\u0900' <= c <= '\u097F')
+    return devanagari_chars > len(text) * 0.3
+
 # ── Predict function ───────────────────────────
 def predict_text(text: str):
+    # Preprocess text before tokenizing
+    text = preprocess_text(text)
+
     encoding = tokenizer(
         text,
         max_length=MAX_LEN,
@@ -102,13 +117,17 @@ def predict_text(text: str):
         for i in range(len(ID2LABEL))
     }
 
+    # Warn if Devanagari text with low confidence
+    low_confidence_warning = is_mostly_devanagari(text)
+
     return {
         'label'      : label,
         'label_id'   : pred_idx,
         'confidence' : round(confidence * 100, 2),
         'is_bullying': pred_idx != 0,
         'color'      : LABEL_COLORS.get(label, 'gray'),
-        'all_probs'  : all_probs
+        'all_probs'  : all_probs,
+        'warning'    : 'Low confidence — model has limited Devanagari training data' if low_confidence_warning else None
     }
 
 
@@ -156,7 +175,8 @@ def predict_single():
         "confidence" : result['confidence'],
         "is_bullying": result['is_bullying'],
         "color"      : result['color'],
-        "all_probs"  : result['all_probs']
+        "all_probs"  : result['all_probs'],
+        "warning"    : result['warning']
     })
 
 

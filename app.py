@@ -1,33 +1,3 @@
-"""
-================================================
- CYBERBULLYING DETECTION — FLASK API
- (6-Class Multiclass | Multilingual mBERT)
-================================================
- Labels:
-   0 → Not Cyberbullying
-   1 → Gender
-   2 → Religion
-   3 → Other Cyberbullying
-   4 → Age
-   5 → Ethnicity
-
- Languages Supported:
-   English | Nepali Devanagari | Romanized Nepali | Mixed
-
- Endpoints:
-   GET  /              → API info
-   POST /predict       → Single text prediction
-   POST /predict_batch → Multiple texts
-
- Run:
-   python app.py
-
- Test:
-   POST http://127.0.0.1:5000/predict
-   Body: {"text": "tah muji ho"}
-================================================
-"""
-
 import pickle
 import unicodedata
 import torch
@@ -38,11 +8,11 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 app = Flask(__name__)
 CORS(app)
 
-SAVE_DIR = 'cyberguard_mbert_best'
+SAVE_DIR = 'cyberguard_mdistilbert_best'
 MAX_LEN  = 128
 
 # ── Load model on startup ──────────────────────
-print("Loading model, please wait...")
+print("Loading mDistilBERT model, please wait...")
 
 tokenizer = AutoTokenizer.from_pretrained(SAVE_DIR)
 model     = AutoModelForSequenceClassification.from_pretrained(SAVE_DIR)
@@ -65,7 +35,8 @@ except FileNotFoundError:
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model  = model.to(device)
 
-print(f"✅ Model loaded on {device}")
+print(f"   mDistilBERT model loaded on {device}")
+print(f"   Model: distilbert-base-multilingual-cased")
 print(f"   Labels: {ID2LABEL}\n")
 
 LABEL_COLORS = {
@@ -77,7 +48,7 @@ LABEL_COLORS = {
     'Ethnicity'          : 'pink',
 }
 
-# ── Preprocessing ──────────────────────────────
+# ── Preprocessing ko kamm ──────────────────────────────
 def preprocess_text(text: str) -> str:
     # Normalize Devanagari unicode (fixes encoding inconsistencies)
     text = unicodedata.normalize('NFC', text)
@@ -137,8 +108,16 @@ def predict_text(text: str):
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({
-        "api"      : "CyberGuard Multilingual Detection API",
-        "model"    : "distilbert-base-multilingual-cased (mBERT)",
+        "api"      : "CyberGuard Multilingual Cyberbullying Detection API",
+        "model"    : "distilbert-base-multilingual-cased (mDistilBERT)",
+        "architecture": {
+            "type"            : "mDistilBERT — Multilingual Distilled BERT",
+            "layers"          : 6,
+            "hidden_dim"      : 768,
+            "attention_heads" : 12,
+            "parameters"      : "~134M",
+            "max_token_length": 128
+        },
         "languages": ["English", "Nepali Devanagari", "Romanized Nepali", "Mixed"],
         "labels"   : ID2LABEL,
         "endpoints": {
@@ -224,5 +203,5 @@ def predict_batch():
 #  RUN
 # ════════════════════════════════════════════
 if __name__ == '__main__':
-    print("🚀 Starting Flask server at http://127.0.0.1:5000\n")
+    print("Starting CyberGuard mDistilBERT Flask server at http://127.0.0.1:5000\n")
     app.run(debug=False, host='0.0.0.0', port=5000)
